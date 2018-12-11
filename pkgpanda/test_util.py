@@ -262,74 +262,48 @@ def test_remove_directory():
     assert not os.path.isdir(test_dir)
 
 
-def test_islink(tmpdir):
-    # Test file.
+def test_symlinks(tmpdir):
     temp_file = str(tmpdir.join("temp_file"))
+    temp_dir = str(tmpdir.join("temp_dir"))
+    temp_file_in_dir = temp_dir + os.sep + "dir_file"
+    temp_file_link = temp_file + "_link"
+    temp_dir_link = temp_dir + "_link"
+    temp_file_nolink = temp_file + "_nolink"
+    temp_dir_nolink = temp_dir + "_nolink"
+
+    # Create directories and files to link to
+    pkgpanda.util.make_directory(temp_dir)
+    pkgpanda.util.make_directory(temp_dir_nolink)
     with open(temp_file, "w") as f:
         f.write("Test Data\n")
-    assert not pkgpanda.util.islink(temp_file)
+    with open(temp_file_in_dir, "w") as f:
+        f.write("Test Data\n")
+    with open(temp_file_nolink, "w") as f:
+        f.write("Test Data\n")
 
-    temp_file_link = temp_file + "_link"
-    pkgpanda.util.link_file(temp_file, temp_file_link)
+    # Create symlinks to the top-level file and directory
+    pkgpanda.util.make_symlink(temp_file, temp_file_link)
+    pkgpanda.util.make_symlink(temp_dir, temp_dir_link)
+
+    # Test that file and directory links are reported, and
+    # regular directory and file are reported properly.
+    # Note that hard links for files on Windows will show
+    # both source and destination as a link as there is no
+    # way of differentiating which side of a link we are at.
+    # As a result we don't test the original file and directory.
     assert pkgpanda.util.islink(temp_file_link)
-
-    # Test directory.
-    temp_dir = str(tmpdir.join("temp_dir"))
-    pkgpanda.util.make_directory(temp_dir)
-    assert not pkgpanda.util.islink(temp_dir)
-
-    temp_dir_link = temp_dir + "_link"
-    pkgpanda.util.link_file(temp_dir, temp_dir_link)
     assert pkgpanda.util.islink(temp_dir_link)
+    assert not pkgpanda.util.islink(temp_file_nolink)
+    assert not pkgpanda.util.islink(temp_dir_nolink)
 
-
-def test_realpath(tmpdir):
-    # Test file.
-    temp_file = str(tmpdir.join("temp_file"))
-    with open(temp_file, "w") as f:
-        f.write("Test Data\n")
-    assert pkgpanda.util.realpath(temp_file) == temp_file
-
-    temp_file_link = temp_file + "_link"
-    pkgpanda.util.link_file(temp_file, temp_file_link)
+    # Test that real path is returned from symlink file and directory,
+    # as well as regular file and directory. (note with windows hard links
+    # we can only assume to show the other side of the link as they are both
+    # the same file)
+    assert pkgpanda.util.realpath(temp_file_nolink) == temp_file_nolink
+    assert pkgpanda.util.realpath(temp_dir_nolink) == temp_dir_nolink
     assert pkgpanda.util.realpath(temp_file_link) == temp_file
-
-    # Test directory.
-    temp_dir = str(tmpdir.join("temp_dir"))
-    pkgpanda.util.make_directory(temp_dir)
-    assert pkgpanda.util.realpath(temp_dir) == temp_dir
-
-    temp_dir_link = temp_dir + "_link"
-    pkgpanda.util.link_file(temp_dir, temp_dir_link)
     assert pkgpanda.util.realpath(temp_dir_link) == temp_dir
-
-
-def test_link_file(tmpdir):
-    # Test file.
-    temp_file = str(tmpdir.join("temp_file"))
-    with open(temp_file, "w") as f:
-        f.write("Test Data\n")
-
-    temp_file_link = temp_file + "_link"
-    pkgpanda.util.link_file(temp_file, temp_file_link)
-
-    with open(temp_file_link, "r") as f:
-        assert f.read() == "Test Data\n"
-
-    # Test directory.
-    temp_dir = str(tmpdir.join("temp_dir"))
-    pkgpanda.util.make_directory(temp_dir)
-
-    temp_dir_link = temp_dir + "_link"
-    pkgpanda.util.link_file(temp_dir, temp_dir_link)
-
-    temp_file = temp_dir + os.sep + "temp_file"
-    with open(temp_file, "w") as f:
-        f.write("Test Data\n")
-
-    temp_file_link = temp_dir_link + os.sep + "temp_file"
-    with open(temp_file_link, "r") as f:
-        assert f.read() == "Test Data\n"
 
 
 def test_variant_variations():
@@ -468,6 +442,7 @@ def test_write_string(tmpdir):
     pkgpanda.util.write_string(filename=filename, data='foo_contents_2')
     with open(filename) as f:
         assert f.read() == 'foo_contents_2'
+
     if not pkgpanda.util.is_windows:
         st_mode = os.stat(filename).st_mode
         expected_permission = 0o644
@@ -475,48 +450,92 @@ def test_write_string(tmpdir):
 
     if not pkgpanda.util.is_windows:
         os.chmod(filename, 0o777)
-        pkgpanda.util.write_string(filename=filename, data='foo_contents_3')
-        with open(filename) as f:
-            assert f.read() == 'foo_contents_3'
+    pkgpanda.util.write_string(filename=filename, data='foo_contents_3')
+    with open(filename) as f:
+        assert f.read() == 'foo_contents_3'
+    if not pkgpanda.util.is_windows:
         st_mode = os.stat(filename).st_mode
         expected_permission = 0o777
         assert (st_mode & 0o777) == expected_permission
 
 
 def test_download(tmpdir):
-    # Create something to download.
-    remote_file = os.path.join(str(tmpdir), 'download_file')
-    pkgpanda.util.write_string(filename=remote_file, data='file_contents')
-    with open(remote_file) as f:
-        assert f.read() == 'file_contents'
+    # Create something to download
+    download_file = os.path.join(str(tmpdir), 'download_file')
+    pkgpanda.util.write_string(filename=download_file, data='download_contents')
+    with open(download_file) as f:
+        assert f.read() == 'download_contents'
 
-    # Download the file.
-    url = pathlib.Path(remote_file).as_uri()
-    local_file = os.path.join(str(tmpdir), 'local_file')
-    pkgpanda.util.download(local_file, url, str(tmpdir.realpath()))
+    # Download the file
+    downloaded_file = os.path.join(str(tmpdir), 'downloaded_file')
+    download_url = 'file://' + download_file.replace(os.sep, '/')
+    pkgpanda.util.download(downloaded_file, download_url, os.getcwd())
 
-    # Validate the downloaded file is correct.
-    with open(local_file) as f:
-        assert f.read() == 'file_contents'
+    # validate the downloaded_file is correct
+    with open(downloaded_file) as f:
+        assert f.read() == 'download_contents'
 
 
 def test_load_json(tmpdir):
-    # Create some JSON to load.
-    json_contents = {
-        "requires": [
-            {
-                "name": "test_package",
-                "variant": "test_variant",
-            },
-        ],
+    # Create something to load
+    json_filename = os.path.join(str(tmpdir), 'json_file')
+    json_contents = """{
+  "requires": [{"name":"test_package", "variant":"test_variant"}],
+  "sources": {},
+  "username": "test_username"
+}"""
+    pkgpanda.util.write_string(filename=json_filename, data=json_contents)
+    with open(json_filename) as f:
+        assert f.read() == json_contents
+
+    # Load the json
+    result_json = pkgpanda.util.load_json(json_filename)
+
+    # Make sure we decoded everything properly
+    assert result_json == {
+        "requires": [{"name": "test_package", "variant": "test_variant"}],
         "sources": {},
-        "username": "test_username",
+        "username": "test_username"
     }
 
-    # Write the JSON out to a file.
-    json_filename = os.path.join(str(tmpdir), 'json_file')
-    pkgpanda.util.write_string(filename=json_filename, data=json.dumps(json_contents))
 
-    # Load the JSON from the file and assert its contents are correct.
-    result_json = pkgpanda.util.load_json(json_filename)
-    assert result_json == json_contents
+def test_download_then_load_json(tmpdir):
+    # This test is validating a pattern used in a few places where we download a json
+    # file and the load it
+
+    # create a json file to download
+    json_filename = os.path.join(str(tmpdir), 'json_file')
+    json_contents = """{
+  "requires": [{"name":"test_package", "variant":"test_variant"}],
+  "sources": {},
+  "username": "test_username"
+}"""
+    pkgpanda.util.write_string(filename=json_filename, data=json_contents)
+    with open(json_filename) as f:
+        assert f.read() == json_contents
+
+    # Create a temporary file to write to and grab the filename, closing the file before
+    # continuing on to actually write then read the file.
+    # On Linux we can wrap the download() and load_json() inside with 'with' because the
+    # file can be re-opened.
+    # On Windows the file is not opened with the correct sharing so we cannot open an
+    # already opened file. Windows would fail while trying to copy the file in download().
+    with tempfile.NamedTemporaryFile() as f2:
+        downloaded_json_filename = f2.name
+
+    try:
+        # Download the file
+        download_url = 'file://' + json_filename.replace(os.sep, '/')
+        pkgpanda.util.download(downloaded_json_filename, download_url, os.getcwd())
+
+        # Load the json
+        result_json = pkgpanda.util.load_json(json_filename)
+
+        # Make sure we decoded everything properly
+        assert result_json == {
+            "requires": [{"name": "test_package", "variant": "test_variant"}],
+            "sources": {},
+            "username": "test_username"
+        }
+    finally:
+        os.remove(downloaded_json_filename)

@@ -1,28 +1,43 @@
-from subprocess import PIPE, Popen
+from subprocess import check_output, PIPE, Popen, STDOUT
 
 from pkgpanda.util import is_windows, resources_test_dir
 
-
-package_dir = "packages"
-
 if is_windows:
-    package_script = "shell_script_check.ps1"
-    output_stderr = "WARNING: `not_supported.dummy` file-type is not supported\n"
+    # File permissions are different on Windows, as well as end of line characters
+    list_output = """pkg1--12345\r
+ - hello_world_ok.py\r
+ - not_executable.py\r
+pkg2--12345\r
+ - failed_check.py\r
+ - shell_script_check.ps1\r
+"""
 else:
-    package_script = "shell_script_check.sh"
-    output_stderr = "WARNING: `not_executable.py` is not executable\n"
-
-list_output_stdout = """pkg1--12345
+    list_output = """WARNING: `not_executable.py` is not executable
+pkg1--12345
  - hello_world_ok.py
 pkg2--12345
  - failed_check.py
  - {}
 """.format(package_script)
 
-run_output_stdout = """Hello World
+if is_windows:
+    run_output_stdout = """Hello World\r
+I exist to fail...\r
+Assertion error\r
+Hello World\r
+"""
+else:
+    run_output_stdout = """Hello World
 I exist to fail...
 Assertion error
 Hello World
+"""
+
+if is_windows:
+    # execution permission is not used on Windows so this error does not happen
+    run_output_stderr = ""
+else:
+    run_output_stderr = """WARNING: `not_executable.py` is not executable
 """
 
 

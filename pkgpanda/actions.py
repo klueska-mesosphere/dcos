@@ -9,6 +9,7 @@ from gen import do_gen_package, resolve_late_package
 from pkgpanda import PackageId, requests_fetcher
 from pkgpanda.constants import (DCOS_SERVICE_CONFIGURATION_PATH,
                                 install_root,
+                                is_windows,
                                 SYSCTL_SETTING_KEY)
 from pkgpanda.exceptions import FetchError, PackageConflict, ValidationError
 from pkgpanda.util import (download, extract_tarball, if_exists, load_json,
@@ -189,18 +190,15 @@ def setup(install, repository):
 def _start_dcos_target(block_systemd):
     no_block = [] if block_systemd else ["--no-block"]
     check_call(["systemctl", "daemon-reload"])
-    check_call(["systemctl", "enable", "dcos.target", '--no-reload'])
+    enable_command = ["systemctl", "enable", "dcos.target", '--no-reload']
+    if is_windows:
+        enable_command += ['--systemd-execpath', 'c:\\opt\\mesosphere\\bin\\']
+    check_call(enable_command)
     check_call(["systemctl", "start", "dcos.target"] + no_block)
 
 
 def _get_package_list(package_list_id: str, repository_url: str) -> List[str]:
     package_list_url = repository_url + '/package_lists/{}.package_list.json'.format(package_list_id)
-
-    # TODO(klueska): On Windows there are issues with following a simple
-    # "delete-on-close" semantic, so we instead pass 'delete=False' when we
-    # create the temporary file and then make sure we delete it in all
-    # cases after it is no longer being used. We should wrap this in a
-    # helper function of some sort.
     with tempfile.NamedTemporaryFile(delete=False) as f:
         filename = f.name
     try:
@@ -250,12 +248,6 @@ def _do_bootstrap(install, repository):
             raise ValidationError("Late package must have the version setup. Bad package: {}".format(pkg_id_str))
 
         # Collect the late config package.
-        #
-        # TODO(klueska): On Windows there are issues with following a simple
-        # "delete-on-close" semantic, so we instead pass 'delete=False' when we
-        # create the temporary file and then make sure we delete it in all
-        # cases after it is no longer being used. We should wrap this in a
-        # helper function of some sort.
         with tempfile.NamedTemporaryFile(delete=False) as f:
             filename = f.name
         try:
@@ -274,12 +266,6 @@ def _do_bootstrap(install, repository):
 
         # Render the package onto the filesystem and add it to the package
         # repository.
-        #
-        # TODO(klueska): On Windows there are issues with following a simple
-        # "delete-on-close" semantic, so we instead pass 'delete=False' when we
-        # create the temporary file and then make sure we delete it in all
-        # cases after it is no longer being used. We should wrap this in a
-        # helper function of some sort.
         with tempfile.NamedTemporaryFile(delete=False) as f:
             filename = f.name
         try:

@@ -1115,9 +1115,6 @@ def _build(package_store, name, variant, clean_after_build, recursive):
     # Clean out src, result so later steps can use them freely for building.
     def clean():
         if is_windows:
-            # These native calls handle symlinks better than a simple 'rm -rf'
-            # on windows, as well as perform retries when the operating system
-            # does not release the files quick enough for deletion and renaming.
             remove_dir = package_store.get_package_cache_folder(name)
             remove_directory(remove_dir + "\\src")
             remove_directory(remove_dir + "\\result")

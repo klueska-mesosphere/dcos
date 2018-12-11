@@ -35,8 +35,8 @@ from pkgpanda.constants import (DCOS_SERVICE_CONFIGURATION_FILE,
                                 STATE_DIR_ROOT)
 from pkgpanda.exceptions import (InstallError, PackageError, PackageNotFound,
                                  ValidationError)
-from pkgpanda.util import (copy_file, download, extract_tarball, if_exists, is_windows, islink, link_file,
-                           load_json, make_directory, realpath, remove_directory, remove_file, rename_file,
+from pkgpanda.util import (copy_file, download, extract_tarball, if_exists, is_windows, islink, load_json,
+                           make_directory, make_symlink, realpath, remove_directory, remove_file, rename_file,
                            write_json, write_string)
 
 if not is_windows:
@@ -49,25 +49,21 @@ if not is_windows:
 reserved_env_vars = ["LD_LIBRARY_PATH", "PATH"]
 
 if is_windows:
+    windows_path = ('{0}\\bin;{0}\\bin\\PowerShell-Core;{0}\\bin\\7-Zip;'
+                    '{0}\\bin\\Python;{0}\\bin\\Python\\Scripts')
     environment_filename = "environment.ps1"
     environment_export_filename = "environment.export.ps1"
-    env_header = "\n".join([
-        '# Pkgpanda provided environment variables',
-        '$env:PATH="$env:PATH;{0}\\bin\\scripts;{0}\\bin"\n\n'])
-    env_export_header = "\n".join([
-        '# Pkgpanda provided environment variables',
-        '$env:PATH="{0}\\bin\\scripts;{0}\\bin;$env:PATH"\n\n'])
+    env_header = '# Pkgpanda provided environment variables\n$env:PATH="' + windows_path + ';$env:PATH"\n\n'
+    env_export_header = '# Pkgpanda provided environment variables\n$env:PATH="' + windows_path + ';$env:PATH"\n\n'
 else:
     environment_filename = "environment"
     environment_export_filename = "environment.export"
-    env_header = "\n".join([
-        '# Pkgpanda provided environment variables',
-        'LD_LIBRARY_PATH={0}/lib',
-        'PATH={0}/bin:/usr/bin:/bin:/sbin\n\n'])
-    env_export_header = '\n'.join([
-        '# Pkgpanda provided environment variables',
-        'export LD_LIBRARY_PATH={0}/lib',
-        'export PATH="{0}/bin:$PATH"\n\n'])
+    env_header = """# Pkgpanda provided environment variables
+    LD_LIBRARY_PATH={0}/lib
+    PATH={0}/bin:/usr/bin:/bin:/sbin\n\n"""
+    env_export_header = """# Pkgpanda provided environment variables
+    export LD_LIBRARY_PATH={0}/lib
+    export PATH="{0}/bin:$PATH"\n\n"""
 
 name_regex = "^[a-zA-Z0-9@_+][a-zA-Z0-9@._+\-]*$"
 version_regex = "^[a-zA-Z0-9@_+:.]+$"
@@ -144,11 +140,11 @@ class Systemd:
             if is_windows:
                 # on windows we use hard links so we link to the temporary name and it will
                 # still be fine after the rename
-                link_file(tmp_systemd_file_path, wants_symlink_path)
+                make_symlink(tmp_systemd_file_path, wants_symlink_path)
             else:
-                # This link won't point to the correct file until the copied unit file is moved to its
+                # This symlink won't point to the correct file until the copied unit file is moved to its
                 # target location during activate_new_unit_files().
-                link_file(systemd_file_path, wants_symlink_path)
+                make_symlink(systemd_file_path, wants_symlink_path)
 
     def remove_unit_files(self):
         if not os.path.exists(self.__unit_directory):
@@ -404,12 +400,6 @@ def requests_fetcher(base_url, id_str, target, work_dir):
     url = base_url + "/packages/{0}/{1}.tar.xz".format(id.name, id_str)
     # TODO(cmaloney): Use a private tmp directory so there is no chance of a user
     # intercepting the tarball + other validation data locally.
-    #
-    # TODO(klueska): On Windows there are issues with following a simple
-    # "delete-on-close" semantic, so we instead pass 'delete=False' when we
-    # create the temporary file and then make sure we delete it in all
-    # cases after it is no longer being used. We should wrap this in a
-    # helper function of some sort.
     with tempfile.NamedTemporaryFile(suffix=".tar.xz", delete=False) as file:
         filename = file.name
     try:
@@ -562,7 +552,7 @@ def symlink_tree(src, dest):
             symlink_tree(src_path, dest_path)
         else:
             try:
-                link_file(src_path, dest_path)
+                make_symlink(src_path, dest_path)
             except FileNotFoundError as ex:
                 raise ConflictingFile(src_path, dest_path, ex) from ex
 
@@ -888,7 +878,7 @@ class Install:
                                                                                     ex.src))
 
             # Add to the active folder
-            link_file(package.path, os.path.join(self._make_abs("active.new"), package.name))
+            make_symlink(package.path, os.path.join(self._make_abs("active.new"), package.name))
 
             # Add to the environment and environment.export contents
 

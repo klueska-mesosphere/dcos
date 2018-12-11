@@ -5,57 +5,49 @@
 
 FROM microsoft/windowsservercore:1803
 
+
 # Default to PowerShell if no other command specified.
 CMD ["powershell.exe", "-NoLogo", "-ExecutionPolicy", "Bypass"]
 
+
 ADD https://github.com/git-for-windows/git/releases/download/v2.16.1.windows.1/Git-2.16.1-64-bit.exe c:\temp\Git-2.16.1-64-bit.exe
 COPY .\setup-git.ps1 \temp\
-RUN  powershell.exe -file c:\temp\setup-git.ps1
+RUN powershell.exe -file c:\temp\setup-git.ps1
 
 ADD https://cmake.org/files/v3.9/cmake-3.9.0-win64-x64.msi c:\temp\cmake-3.9.0-win64-x64.msi
 COPY .\setup-cmake.ps1 \temp\
-RUN  powershell.exe -file c:\temp\setup-cmake.ps1
+RUN powershell.exe -file c:\temp\setup-cmake.ps1
 
 ADD https://github.com/mesos/3rdparty/raw/master/patch-2.5.9-7-setup.exe c:\temp\patch-2.5.9-7-setup.exe
 COPY .\setup-patch.ps1 \temp\
-RUN  powershell.exe -file c:\temp\setup-patch.ps1
+RUN powershell.exe -file c:\temp\setup-patch.ps1
 
 ADD https://github.com/mesos/3rdparty/raw/master/make-3.81.exe c:\temp\make-3.81.exe
 COPY .\setup-make.ps1 \temp\
-RUN  powershell.exe -file c:\temp\setup-make.ps1
+RUN powershell.exe -file c:\temp\setup-make.ps1
 
-
-ADD https://packages.erlang-solutions.com/erlang/esl-erlang/FLAVOUR_1_general/esl-erlang_20.3~windows_amd64.exe c:\temp\otp_win64_20.3.exe
+ADD http://erlang.org/download/otp_win64_21.1.exe c:\temp\otp_win64.exe
 COPY .\setup-erlang.ps1 \temp\
-RUN  powershell.exe -file c:\temp\setup-erlang.ps1
+RUN powershell.exe -file c:\temp\setup-erlang.ps1
 
 ADD https://golang.org/dl/go1.9.3.windows-amd64.zip c:\temp\go1.9.3.windows-amd64.zip
 COPY .\setup-golang.ps1 \temp\
-RUN  powershell.exe -file c:\temp\setup-golang.ps1
-ENV GOPATH 'c:\gopath'
-
-ADD https://github.com/ninja-build/ninja/releases/download/v1.8.2/ninja-win.zip c:\temp\ninja.zip
-RUN powershell -command "& new-item -itemtype directory ${env:ProgramFiles(x86)}\ninja"
-RUN powershell -command "& Expand-Archive c:\temp\ninja.zip ${env:ProgramFiles(x86)}\ninja"
+RUN powershell.exe -file c:\temp\setup-golang.ps1
 
 
-ENV GOLANG_PATH 'C:\gopath\bin;c:\go\bin'
-ENV GIT_PATH 'C:\Program Files\git\cmd;C:\Program Files\git\bin'
-ENV CMAKE_PATH 'C:\Program Files\CMake\bin'
-ENV GNUWIN32_PATH 'C:\Program Files (x86)\GnuWin32\bin'
-ENV ERLANG_PATH 'C:\Program Files\erlang\bin'
-ENV NINJA 'C:\Program Files (x86)\ninja'
+ENV GOPATH 'C:\gopath'
 
-RUN setx /m PATH "%PATH%;C:\Bin;%GIT_PATH%;%CMAKE_PATH%;%GNUWIN32_PATH%;%ERLANG_PATH%;%GOLANG_PATH%;%NINJA%"
+RUN setx /m PATH "%PATH%;C:\Bin;C:\Program Files\git\cmd;C:\Program Files\git\bin;C:\Program Files\CMake\bin;C:\Program Files (x86)\GnuWin32\bin;C:\Program Files\erlang\bin;C:\gopath\bin;C:\go\bin"
+
 
 # Download useful tools to C:\Bin.
-ADD https://dist.nuget.org/win-x86-commandline/v4.1.0/nuget.exe C:\Bin\nuget.exe
+ADD https://dist.nuget.org/win-x86-commandline/v4.7.1/nuget.exe C:\Bin\nuget.exe
 
 # Download the Build Tools bootstrapper outside of the PATH.
-ADD https://aka.ms/vs/15/release/vs_buildtools.exe C:\TEMP\vs_buildtools.exe
+ADD https://aka.ms/vs/15/release/vs_buildtools.exe C:\temp\vs_buildtools.exe
 
 # Add C:\Bin to PATH and install Build Tools excluding workloads and components with known issues.
-RUN C:\TEMP\vs_buildtools.exe --quiet --wait --norestart --nocache --installPath C:\BuildTools  `
+RUN C:\temp\vs_buildtools.exe --quiet --wait --norestart --nocache --installPath C:\BuildTools  `
     --add Microsoft.VisualStudio.Workload.MSBuildTools `
     --add Microsoft.VisualStudio.Workload.VCTools `
     --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
@@ -68,4 +60,4 @@ RUN C:\TEMP\vs_buildtools.exe --quiet --wait --norestart --nocache --installPath
 # Start developer command prompt with any other commands specified.
 # note: vsdevcmd.bat builds for x86 by default, use these options for amd64:
 # -arch=amd64 (-host_arch==amd64 also?)
-ENTRYPOINT C:\BuildTools\vc\Auxiliary\Build\vcvars64.bat &&
+ENTRYPOINT C:\BuildTools\vc\Auxiliary\Build\vcvars64.bat && 

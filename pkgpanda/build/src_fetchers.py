@@ -4,7 +4,7 @@ import shutil
 from subprocess import CalledProcessError, check_call, check_output, DEVNULL
 
 from pkgpanda.exceptions import ValidationError
-from pkgpanda.util import download_atomic, is_windows, logger, sha1
+from pkgpanda.util import download_atomic, is_windows, logger, remove_directory, remove_file, rename_file, sha1
 
 
 # Ref must be a git sha-1. We then pass it through get_sha1 to make
@@ -230,21 +230,26 @@ def _check_components_sanity(path, allow_extra_files):
 
     Args:
         path: path to the extracted archive's directory
-        allow_extra_files: if True, allow other files next to the top level directory
+        allow_extra_files: if true only checks that there is 1 directory
+            to move and ignores other files.
 
     Raises:
         Raise an exception if there is anything else than a single directory
     """
     files = os.listdir(path)
 
-    if len(files) == 0:
-        raise ValidationError("Extracted archive is empty")
-
-    dirs = [f for f in files if os.path.isdir(os.path.join(path, f))]
-
-    if len(dirs) > 1 or (len(files) > 1 and not allow_extra_files):
-        raise ValidationError("Extracted archive has more than one top level"
-                              "component, unable to strip it.")
+    if allow_extra_files:
+        dir_count = 0
+        for dir_file in dir_contents:
+            if os.path.isdir(os.path.join(path, dir_file)):
+                dir_count += 1
+        if dir_count != 1:
+            raise ValidationError("Extracted archive has more than one top level"
+                                  "directory, unable to strip it.")
+    else:
+        if len(dir_contents) != 1 or not os.path.isdir(os.path.join(path, dir_contents[0])):
+            raise ValidationError("Extracted archive has more than one top level"
+                                  "component, unable to strip it.")
 
 
 def _strip_first_path_component(path, allow_extra_files=False):
@@ -258,9 +263,14 @@ def _strip_first_path_component(path, allow_extra_files=False):
 
     Args:
         path: path where extracted archive contents can be found
-        allow_extra_files: if True, allow other files next to the top level directory
+        allow_extra_files will allow extra files in the top-level directory
     """
     _check_components_sanity(path, allow_extra_files)
+
+    for dir_file in os.listdir(path):
+        if os.path.isdir(os.path.join(path, dir_file)):
+            top_level_dir = os.path.join(path, dir_file)
+            break
 
     top_level_dir = next(os.path.join(path, f) for f in os.listdir(path) if os.path.isdir(os.path.join(path, f)))
     contents = os.listdir(top_level_dir)
@@ -268,9 +278,9 @@ def _strip_first_path_component(path, allow_extra_files=False):
     for entry in contents:
         old_path = os.path.join(top_level_dir, entry)
         new_path = os.path.join(path, entry)
-        os.rename(old_path, new_path)
+        rename_file(old_path, new_path)
 
-    os.rmdir(top_level_dir)
+    remove_directory(top_level_dir)
 
 
 def extract_archive(archive, dst_dir):
@@ -283,8 +293,6 @@ def extract_archive(archive, dst_dir):
         # look into building a wrapper function for it.
         if is_windows:
             tmp_filename, tmp_extension = os.path.splitext(archive)
-
-            # Decompress before untarring if necessary.
             if tmp_extension == ".xz" or tmp_extension == ".gz":
                 tar_filename = dst_dir + os.sep + os.path.basename(tmp_filename)
                 # note 'e' means extract without directory so we can find the enclosed tar
@@ -293,14 +301,12 @@ def extract_archive(archive, dst_dir):
             else:
                 tar_filename = archive
                 delete_intermediate_file = False
-
-            # Now untar and delete the intermediate file (if we needed to decompress first).
+                # now untar
             try:
                 check_call(['7z', 'x', tar_filename, '-o' + dst_dir], stdout=DEVNULL)
             finally:
                 if delete_intermediate_file:
-                    os.remove(tar_filename)
-
+                    remove_file(tar_filename)
             # 7zip does not support '--strip-components=1',
             _strip_first_path_component(dst_dir, True)
         else:

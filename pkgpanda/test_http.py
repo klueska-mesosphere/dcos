@@ -5,7 +5,7 @@ import os
 from shutil import copytree
 
 from pkgpanda.http.server import app
-from pkgpanda.util import is_windows, link_file, remove_directory, resources_test_dir
+from pkgpanda.util import is_windows, make_symlink, resources_test_dir
 
 
 def assert_response(response, status_code, body, headers=None, body_cmp=operator.eq):
@@ -139,13 +139,13 @@ def test_get_active_package():
     assert_error(client.get('/active/!@#*'), 404)
 
 
-def _fixup_active_dir_symlinks(active_dir):
-    contents = os.listdir(active_dir)
-    for item in contents:
-        pkglink = active_dir + '\\' + item
-        pkgpath = os.path.abspath(active_dir + '\\' + os.readlink(pkglink))
-        os.unlink(pkglink)
-        link_file(pkgpath, pkglink)
+def fixup_active_dir_symlinks(fixup_active_dir):
+    dir_contents = os.listdir(fixup_active_dir)
+    for dir_item in dir_contents:
+        full_path = fixup_active_dir + '\\' + dir_item
+        item_link = os.path.abspath(fixup_active_dir + '\\' + os.readlink(full_path))
+        os.unlink(full_path)
+        make_symlink(item_link, full_path)
 
 
 def test_activate_packages(tmpdir):
@@ -153,45 +153,11 @@ def test_activate_packages(tmpdir):
 
     install_dir = str(tmpdir.join('install'))
     copytree(resources_test_dir('install'), install_dir, symlinks=True)
-    packages_dir = str(tmpdir.join('packages'))
-    copytree(resources_test_dir('packages'), packages_dir, symlinks=True)
-
-    # On windows we require 'junctions' (a.k.a directory hardlinks) for any
-    # links we create to directories. Unfortunately, git doesn't allow us to
-    # commit 'junctions' back to a git repository. Instead, 'junctions' are
-    # treated by git as copied directories and committed as such. This is
-    # obviously, not what we want for this test, however, because we expect the
-    # 'activated' packages to be links, not copies.
-    #
-    # To address this problem, we keep the committed folders under
-    # 'install/active' as symlinks in the git repo, and dynamically change
-    # them to 'junctions' when this test is invoked.  Unfortunately, this
-    # then causes problems when pytest cleans up the temporary directory
-    # where these junctions are created later on.
-    #
-    # Pytest recursively deletes all files in each 'junction' before
-    # attempting to delete the 'junction' itself.  This causes the original
-    # files contained in the junction (not copies or symlinks of them).
-    # Therefore, whenever pytest removes 'tmpdir' any files underneath any
-    # junctions we create within get deleted at their source (which occurs on
-    # subsequent invocations of pytest just before running any tests).
-    #
-    # To address this, we force the 'active_dir' directory (where we create
-    # all dynamic 'junctions') to be deleted before the current test run
-    # completes. We use our custom 'remove_directory()` function from
-    # 'pkgpanda.util', which knows how to safly remove these junctions
-    # without deleting the files underneath them.
-    #
-    # TODO(klueska): Look into using *actual* symlinks on windows so that we
-    # can avoid the use of junctions and the mess that come with them.
-    #
-    # TODO(klueska): Look into using a test fixture instead of `atexit` to do
-    # the deletion of the 'active_dir'.
     if is_windows:
-        active_dir = install_dir + '\\active'
-        _fixup_active_dir_symlinks(active_dir)
-        atexit.register(lambda path: remove_directory(path), active_dir)
-
+        fixup_active_dir = install_dir + '\\active'
+        packages_dir = str(tmpdir.join('packages'))
+        copytree(resources_test_dir('packages'), packages_dir)
+        fixup_active_dir_symlinks(fixup_active_dir)
     app.config['DCOS_ROOT'] = install_dir
     app.config['DCOS_ROOTED_SYSTEMD'] = True
     client = app.test_client()

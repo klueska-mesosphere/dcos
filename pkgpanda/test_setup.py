@@ -27,6 +27,11 @@ def test_setup(tmpdir):
     expect_fs("{0}".format(tmpdir), ["repository", "root"])
 
     # TODO(cmaloney): Validate things got placed correctly.
+    if is_windows:
+        environment_extension = ".ps1"
+    else:
+        environment_extension = ""
+
     expect_fs(
         "{0}/root".format(tmpdir),
         {
@@ -42,8 +47,8 @@ def test_setup(tmpdir):
             "include": [],
             "dcos.target.wants": ["dcos-mesos-master.service"],
             "dcos.target": None,
-            "environment" + (".ps1" if is_windows else ""): None,
-            "environment.export" + (".ps1" if is_windows else ""): None,
+            "environment" + environment_extension: None,
+            "environment.export" + environment_extension: None,
             "dcos-mesos-master.service": None           # rooted_systemd
         })
 
@@ -110,8 +115,8 @@ def test_setup(tmpdir):
             "include": [],
             "dcos.target": None,
             "dcos.target.wants": ["dcos-mesos-master.service"],
-            "environment" + (".ps1" if is_windows else ""): None,
-            "environment.export" + (".ps1" if is_windows else ""): None,
+            "environment" + environment_extension: None,
+            "environment.export" + environment_extension: None,
             "active.old": ["dcos-provider-abcdef-test", "mesos", "mesos-config"],
             "bin.old": [
                 "mesos",
@@ -122,8 +127,8 @@ def test_setup(tmpdir):
             "etc.old": ["dcos-service-configuration.json", "foobar", "some.json"],
             "include.old": [],
             "dcos.target.wants.old": ["dcos-mesos-master.service"],
-            "environment" + (".ps1" if is_windows else "") + ".old": None,
-            "environment.export" + (".ps1" if is_windows else "") + ".old": None,
+            "environment" + environment_extension + ".old": None,
+            "environment.export" + environment_extension + ".old": None,
             "dcos-mesos-master.service": None       # rooted systemd
         })
 
@@ -278,10 +283,8 @@ def test_systemd_unit_files(tmpdir):
     # The unit file is copied to the base dir and symlinked from dcos.target.wants.
     assert islink(wants_path)
 
-    # On Windows we are using hard links, so base_path will report it is a link
+    # on Windows we are using hard links, so base_path will report it is a link
     # therefore this path will be skipped on Windows
-    # TODO(klueska): Follow up on why we use hard links here instead of
-    # copying the file for base_path.
     if not is_windows:
         assert os.path.isfile(base_path) and not islink(base_path)
     assert realpath(wants_path) == os.path.abspath(base_path)

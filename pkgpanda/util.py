@@ -121,79 +121,57 @@ def copy_file(src_path, dst_path):
 def copy_directory(src_path, dst_path):
     """copy recursively a directory tree from one location to another"""
     if is_windows:
-        # To make sure the copy works we are using cmd version as python
+        # To make sure the copy works we are using xcopy (system executable) as python
         # libraries may not handle symbolic links and other things that are
         # thrown at it.
         src = src_path.replace('/', '\\')
         dst = dst_path.replace('/', '\\')
-        subprocess.check_call(['cmd.exe', '/c', 'xcopy', src, dst, '/E', '/B', '/I'], stdout=subprocess.DEVNULL)
+        subprocess.check_call(['xcopy.exe', src, dst, '/E', '/B', '/I'], stdout=subprocess.DEVNULL)
     else:
         subprocess.check_call(['cp', '-r', src_path, dst_path])
 
 
-def link_file(src, dst):
-    """Create file links in an OS independent manner.
-
-    On Linux, this will create symbolic links for both files and directories.
-    On Windows, this will create hard links for files, and junctions (a.k.a symbolic links) for directories.
-
-    """
+def make_symlink(src_path, dst_path):
     if is_windows:
-        if os.path.isdir(src):
+        if os.path.isdir(src_path):
             # create a junction for directories
-            src = src.replace('/', '\\')
-            dst = dst.replace('/', '\\')
+            src = src_path.replace('/', '\\')
+            dst = dst_path.replace('/', '\\')
             subprocess.check_call(['cmd.exe', '/c', 'mklink', '/J', dst, src], stdout=subprocess.DEVNULL)
         else:
             # create hard link for files
-            os.link(src, dst)
+            os.link(src_path, dst_path)
 
     else:
-        os.symlink(src, dst)
+        os.symlink(src_path, dst_path)
 
 
 def _is_junction(path):
-    if not is_windows:
-        raise Exception("Calls to _is_junction() only supported on Windows")
-
-    # TODO(klueska): Investigate why we need this 'isdir()' check. As far as I
-    # can tell, the check below that relies on 'GetFileAttributesW()' will
-    # return 'True' in cases where the 'path' passed to it is a symbolic link for
-    # either a _file_ or a _directory_. Since a 'junction' is only a directory
-    # level concept, its possible that the 'isdir()' check is required to limit
-    # us to directories only, before we ever make the call to
-    # 'GetFileAttributesW()'. This should be confirmed though.
-    if not os.path.isdir(path):
+    if is_windows:
+        if os.path.isdir(path):
+            file_attribute_reparse_point = 0x0400
+            attributes = ctypes.windll.kernel32.GetFileAttributesW(path)
+            return (attributes & file_attribute_reparse_point) > 0
+    else:
         return False
-
-    file_attribute_reparse_point = 0x0400
-    attributes = ctypes.windll.kernel32.GetFileAttributesW(path)
-    return (attributes & file_attribute_reparse_point) > 0
 
 
 def islink(path):
-    """Check if a file is a link to another file in an OS independent manner.
-
-    On Linux, this will check for symbolic links for both files and directories.
-    On Windows, this will check for hard links for files, and junctions (a.k.a symbolic links) for directories.
-
-    """
     if is_windows:
         if os.path.isdir(path):
             return _is_junction(path)
         elif os.stat(path).st_nlink > 1:
             return True
         else:
-            return False
+            return os.path.islink(path)
     else:
         return os.path.islink(path)
 
 
 def realpath(path):
-    """Get the realpath of 'path' in an OS independent manner (following links as necessary)."""
     if is_windows:
-        if os.path.exists(path) and islink(path):
-            # if 'path' is a link, call powershell to get the target of the link
+        if os.path.exists(path) and (_is_junction(path) or os.stat(path).st_nlink > 1):
+            # if a junction or hard link call powershell to get the target link
             return subprocess.check_output(["powershell", "(get-item " + path + ").target"]).decode().splitlines()[0]
         else:
             # regular file so let os.path do its thing
@@ -326,11 +304,6 @@ def extract_tarball(path, target):
     try:
         assert os.path.exists(path), "Path doesn't exist but should: {}".format(path)
         make_directory(target)
-
-        # TODO(klueska): We need to revisit the logic below. It seems very
-        # brittle in how it decides which files to unzip before unarchiving.
-        # It also duplicates alot of logic in 'src_fetchers.py'. We should
-        # probably look into building a wrapper function for it.
         if is_windows:
             # need to uncompress if ends with .XZ or .gz
             archive_filename, compression_type = os.path.splitext(path)
@@ -532,7 +505,7 @@ def make_tar(result_filename, change_folder):
             tar_cmd += ["--use-compress-program=pxz", "-cf"]
         else:
             tar_cmd += ["-cJf"]
-        tar_cmd += [result_filename, "-C", change_folder, "."]
+        tar_cmd += [os.path.abspath(result_filename), "-C", os.path.abspath(change_folder), "."]
         check_call(tar_cmd)
 
 
@@ -550,7 +523,7 @@ def rewrite_symlinks(root, old_prefix, new_prefix):
                     new_target = os.path.join(new_prefix, target[len(old_prefix) + 1:].lstrip('/'))
                     # Remove the old link and write a new one.
                     os.remove(full_path)
-                    link_file(new_target, full_path)
+                    make_symlink(new_target, full_path)
 
 
 def check_forbidden_services(path, services):

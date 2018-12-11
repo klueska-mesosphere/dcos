@@ -50,22 +50,46 @@ def test_recovery_archive(tmpdir):
     assert action
 
     # TODO(cmaloney): expect_fs
-    expect_fs(
-        str(tmpdir.join("install")),
-        {
-            ".gitignore": None,
-            "active": ["mesos"],
-            "active.buildinfo.full.json": None,
-            "active.old": ["mesos"],
-            "bin": ["mesos", "mesos-dir"],
-            "dcos.target.wants": [".gitignore"],
-            "environment" + (".ps1" if is_windows else ""): None,
-            "environment" + (".ps1" if is_windows else "") + ".old": None,
-            "environment.export" + (".ps1" if is_windows else ""): None,
-            "etc": [".gitignore"],
-            "include": [".gitignore"],
-            "lib": ["libmesos.so"]
-        })
+    if is_windows:
+        expect_fs(
+            str(tmpdir.join("install")),
+            {
+                ".gitignore": None,
+                "active": ["mesos"],
+                "active.buildinfo.full.json": None,
+                "active.old": ["mesos"],
+                "bin": ["mesos", "mesos-dir"],
+                "dcos.target.wants": [".gitignore"],
+                "environment": None,  # linux file ignored
+                "environment.new": None,  # linux file ignored
+                "environment.ps1": None,
+                "environment.export.new": None,  # linux file ignored
+                "environment.export.ps1": None,
+                "environment.ps1.old": None,
+                "etc": [".gitignore"],
+                "include": [".gitignore"],
+                "lib": ["libmesos.so"]
+            })
+    else:
+        expect_fs(
+            str(tmpdir.join("install")),
+            {
+                ".gitignore": None,
+                "active": ["mesos"],
+                "active.buildinfo.full.json": None,
+                "active.old": ["mesos"],
+                "bin": ["mesos", "mesos-dir"],
+                "dcos.target.wants": [".gitignore"],
+                "environment": None,
+                "environment.ps1": None,  # windows file ignored
+                "environment.ps1.new": None,  # windows file ignored
+                "environment.export": None,
+                "environment.export.ps1.new": None,  # windows file ignored
+                "environment.old": None,
+                "etc": [".gitignore"],
+                "include": [".gitignore"],
+                "lib": ["libmesos.so"]
+            })
 
 
 def test_recovery_move_new(tmpdir):
@@ -76,17 +100,37 @@ def test_recovery_move_new(tmpdir):
     assert action
 
     # TODO(cmaloney): expect_fs
-    expect_fs(
-        str(tmpdir.join("install")),
-        {
-            ".gitignore": None,
-            "active": ["mesos"],
-            "active.buildinfo.full.json": None,
-            "bin": ["mesos", "mesos-dir"],
-            "dcos.target.wants": [".gitignore"],
-            "environment" + (".ps1" if is_windows else ""): None,
-            "environment.export" + (".ps1" if is_windows else ""): None,
-            "etc": [".gitignore"],
-            "include": [".gitignore"],
-            "lib": ["libmesos.so"]
-        })
+    if is_windows:
+        expect_fs(
+            str(tmpdir.join("install")),
+            {
+                ".gitignore": None,
+                "active": ["mesos"],
+                "active.buildinfo.full.json": None,
+                "bin": ["mesos", "mesos-dir"],
+                "dcos.target.wants": [".gitignore"],
+                "environment.ps1": None,
+                "environment.export.ps1": None,
+                "environment.new": None,  # linux files ignored
+                "environment.export.new": None,  # linux files ignored
+                "etc": [".gitignore"],
+                "include": [".gitignore"],
+                "lib": ["libmesos.so"]
+            })
+    else:
+        expect_fs(
+            str(tmpdir.join("install")),
+            {
+                ".gitignore": None,
+                "active": ["mesos"],
+                "active.buildinfo.full.json": None,
+                "bin": ["mesos", "mesos-dir"],
+                "dcos.target.wants": [".gitignore"],
+                "environment": None,
+                "environment.export": None,
+                "environment.ps1.new": None,  # winodws files ignored
+                "environment.export.ps1.new": None,  # windows files ignored
+                "etc": [".gitignore"],
+                "include": [".gitignore"],
+                "lib": ["libmesos.so"]
+            })

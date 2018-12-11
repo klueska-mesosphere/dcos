@@ -1,6 +1,9 @@
-from pkgpanda.util import expect_fs, resources_test_dir, run
+from pkgpanda.util import expect_fs, is_windows, resources_test_dir, run
 
-fetch_output = """\nFetching: mesos--0.22.0\nFetched: mesos--0.22.0\n"""
+if is_windows:
+    fetch_output = """\rFetching: mesos--0.22.0\rFetched: mesos--0.22.0\r\n"""
+else:
+    fetch_output = """\rFetching: mesos--0.22.0\rFetched: mesos--0.22.0\n"""
 
 
 def test_fetch(tmpdir):
